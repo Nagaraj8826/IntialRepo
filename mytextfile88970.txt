@@ -1,0 +1,285 @@
+
+export const KIND_LABELS: Record<StageKind, string> = {
+  deterministic: 'Deterministic',
+  statistical: 'Statistical',
+  vector: 'Vector',
+  llm: 'LLM',
+  human: 'Human',
+}
+
+export const KIND_BLURB: Record<StageKind, string> = {
+  deterministic: 'Fixed rules and graph traversal — same input, same output, every time.',
+  statistical: 'Z-scores, baselines and causal lag analysis over the signal window.',
+  vector: 'Semantic recall of past incidents from the embedding store.',
+  llm: 'Reasoning model proposing, validating or narrating with structured output.',
+  human: 'An approval gate — an operator decides before the system acts.',
+}
+
+export interface StageDef {
+  key: string
+  label: string
+  kind: StageKind
+  /** One line of "what this step is actually doing", shown in the live hero. */
+  detail: string
+  phase: 'diagnose' | 'act'
+}
+
+/**
+ * The 16 steps of one incident lifecycle: 12 diagnosis stages emitted by the
+ * LangGraph pipeline, then the 4 lifecycle steps the workflow engine drives.
+ * Gates are not steps — approving the RCA is an action *on* the RCA row.
+ */
+export const DIAGNOSIS_STAGES: StageDef[] = [
+  {
+    key: 'alert_ingestion',
+    label: 'Ingesting alert',
+    kind: 'deterministic',
+    detail: 'Normalising the vendor webhook into a canonical Alert',
+    phase: 'diagnose',
+  },
+  {
+    key: 'alert_analysis',
+    label: 'Analysing alert',
+    kind: 'llm',
+    detail: 'Reading what the alert means and which signals matter',
+    phase: 'diagnose',
+  },
+  {
+    key: 'context_loader',
+    label: 'Loading service context',
+    kind: 'deterministic',
+    detail: 'Walking the service map for blast-radius neighbours',
+    phase: 'diagnose',
+  },
+  {
+    key: 'past_incidents_retriever',
+    label: 'Retrieving past incidents',
+    kind: 'vector',
+    detail: 'Semantic search across the historical incident store',
+    phase: 'diagnose',
+  },
+  {
+    key: 'prepare_signals',
+    label: 'Preparing signal fan-out',
+    kind: 'deterministic',
+    detail: 'Planning which metrics, traces and logs to pull per service',
+    phase: 'diagnose',
+  },
+  {
+    key: 'fetch_signals',
+    label: 'Fetching metrics, traces, logs',
+    kind: 'deterministic',
+    detail: 'Concurrent observability queries across the scope',
+    phase: 'diagnose',
+  },
+  {
+    key: 'signal_normalizer',
+    label: 'Normalising signals',
+    kind: 'statistical',
+    detail: 'Baselining each series and scoring anomalies by z-score',
+    phase: 'diagnose',
+  },
+  {
+    key: 'correlation_engine',
+    label: 'Correlating signals',
+    kind: 'statistical',
+    detail: 'Building causal chains from lead/lag across services',
+    phase: 'diagnose',
+  },
+  {
+    key: 'hypothesis_generator',
+    label: 'Generating hypotheses',
+    kind: 'llm',
+    detail: 'Proposing candidate root causes with mechanisms',
+    phase: 'diagnose',
+  },
+  {
+    key: 'hypothesis_validator',
+    label: 'Validating hypotheses',
+    kind: 'llm',
+    detail: 'Probing each hypothesis for supporting or refuting evidence',
+    phase: 'diagnose',
+  },
+  {
+    key: 'root_cause_selection',
+    label: 'Selecting root cause',
+    kind: 'deterministic',
+    detail: 'Scoring survivors and separating cause from victim',
+    phase: 'diagnose',
+  },
+  {
+    key: 'rca_output',
+    label: 'RCA report',
+    kind: 'llm',
+    detail: 'Writing the operator-facing narrative and evidence table',
+    phase: 'diagnose',
+  },
+]
+
+export const LIFECYCLE_STEPS: StageDef[] = [
+  {
+    key: 'plan',
+    label: 'Remediation plan',
+    kind: 'llm',
+    detail: 'Choosing a safe actuator and blast-radius-bounded action',
+    phase: 'act',
+  },
+  {
+    key: 'execute',
+    label: 'Applying the fix',
+    kind: 'deterministic',
+    detail: 'Executing the approved action against the actuator',
+    phase: 'act',
+  },
+  {
+    key: 'verify',
+    label: 'Verifying recovery',
+    kind: 'deterministic',
+    detail: 'Re-reading the signals to confirm the incident cleared',
+    phase: 'act',
+  },
+  {
+    key: 'postmortem',
+    label: 'Post-incident review',
+    kind: 'llm',
+    detail: 'Drafting the timeline, impact and follow-up actions',
+    phase: 'act',
+  },
+]
+
+/** All 16 steps, in the order an incident actually travels through them. */
+export const ALL_STAGES: StageDef[] = [...DIAGNOSIS_STAGES, ...LIFECYCLE_STEPS]
+
+export const STAGE_BY_KEY: Record<string, StageDef> = Object.fromEntries(
+  ALL_STAGES.map((stage) => [stage.key, stage]),
+)
+
+export const STAGE_LABELS: Record<string, string> = Object.fromEntries(
+  ALL_STAGES.map((stage) => [stage.key, stage.label]),
+)
+
+/** One glyph per step so the hero reads at a glance, even before the labels. */
+export const STAGE_ICONS: Record<string, LucideIcon> = {
+  alert_ingestion: BellRing,
+  alert_analysis: ScanSearch,
+  context_loader: Network,
+  past_incidents_retriever: History,
+  prepare_signals: Split,
+  fetch_signals: CloudDownload,
+  signal_normalizer: Activity,
+  correlation_engine: GitMerge,
+  hypothesis_generator: Lightbulb,
+  hypothesis_validator: FlaskConical,
+  root_cause_selection: Target,
+  rca_output: FileText,
+  plan: ClipboardList,
+  execute: Wrench,
+  verify: ShieldCheck,
+  postmortem: BookOpen,
+}
+
+export interface LaneDef {
+  key: string
+  title: string
+  caption: string
+  color: string
+  icon: LucideIcon
+  /** Index into ALL_STAGES of the lane's first step — every lane holds four. */
+  start: number
+}
+
+/** The 16 steps grouped 4×4 by purpose, which is how the hero lays them out. */
+export const LANES: LaneDef[] = [
+  { key: 'detect', title: 'Detect', caption: 'See the signal', color: '#2DD4BF', icon: Radar, start: 0 },
+  { key: 'investigate', title: 'Investigate', caption: 'Gather & analyse', color: '#38BDF8', icon: Search, start: 4 },
+  { key: 'rca', title: 'Root cause', caption: 'Find the truth', color: '#C084FC', icon: Microscope, start: 8 },
+  { key: 'act', title: 'Act', caption: 'Resolve & learn', color: '#FB923C', icon: Wrench, start: 12 },
+]
+
+export type RowState = 'pending' | 'active' | 'awaiting' | 'done' | 'failed'
+
+export const ROW_STATE_COLOR: Record<RowState, string> = {
+  pending: 'var(--text-faint)',
+  active: '#60A5FA',
+  awaiting: '#EC4899',
+  done: '#34D399',
+  failed: '#F87171',
+}
+
+/** phase -> [row the incident is parked on, that row's state]. */
+export const PHASE_STEP: Record<string, [string, RowState]> = {
+  INGESTED: ['rca_output', 'active'],
+  DIAGNOSING: ['rca_output', 'active'],
+  DIAGNOSE_FAILED: ['rca_output', 'failed'],
+  AWAITING_RCA_REVIEW: ['rca_output', 'awaiting'],
+  RCA_APPROVED: ['plan', 'active'],
+  PLANNING_REMEDIATION: ['plan', 'active'],
+  AWAITING_REMEDIATION_APPROVAL: ['plan', 'awaiting'],
+  REMEDIATION_APPROVED: ['execute', 'active'],
+  REMEDIATING: ['execute', 'active'],
+  REMEDIATION_FAILED: ['execute', 'failed'],
+  VERIFYING: ['verify', 'active'],
+  ROLLING_BACK: ['verify', 'failed'],
+  POSTMORTEM: ['postmortem', 'awaiting'],
+  CLOSED: ['postmortem', 'done'],
+  CLOSED_NO_ACTION: ['plan', 'done'],
+  CANCELLED: ['rca_output', 'failed'],
+  EXPIRED: ['rca_output', 'failed'],
+  FAILED: ['execute', 'failed'],
+}
+
+export interface PhaseStatus {
+  title: string
+  color: string
+  next: string
+}
+
+export const PHASE_STATUS: Record<string, PhaseStatus> = {
+  INGESTED: { title: 'Investigation starting', color: '#60A5FA', next: 'The agent is picking up the alert' },
+  DIAGNOSING: { title: 'Investigating', color: '#60A5FA', next: 'Running the diagnosis pipeline' },
+  AWAITING_RCA_REVIEW: {
+    title: 'Diagnosis ready for your review',
+    color: '#FBBF24',
+    next: 'Approve the RCA to plan a fix',
+  },
+  RCA_APPROVED: { title: 'Planning the fix', color: '#60A5FA', next: 'The agent is choosing an action' },
+  PLANNING_REMEDIATION: { title: 'Planning the fix', color: '#60A5FA', next: 'The agent is choosing an action' },
+  AWAITING_REMEDIATION_APPROVAL: {
+    title: 'Fix ready for your approval',
+    color: '#FBBF24',
+    next: 'Approve to apply the change',
+  },
+  REMEDIATION_APPROVED: { title: 'Applying the fix', color: '#60A5FA', next: 'Executing the approved action' },
+  REMEDIATING: { title: 'Applying the fix', color: '#60A5FA', next: 'Executing the approved action' },
+  VERIFYING: {
+    title: 'Fix applied — confirming recovery',
+    color: '#60A5FA',
+    next: 'Checking automatically; you can also check now',
+  },
+  POSTMORTEM: { title: 'Recovered — review ready', color: '#34D399', next: 'Publish the review to close' },
+  CLOSED: { title: 'Closed with remediation', color: '#34D399', next: 'Incident resolved end to end' },
+  CLOSED_NO_ACTION: { title: 'Closed without action', color: '#94A3B8', next: 'No remediation was warranted' },
+  REMEDIATION_FAILED: { title: 'Fix failed', color: '#F87171', next: 'Check the audit trail' },
+  FAILED: { title: 'Workflow failed', color: '#F87171', next: 'Check the audit trail' },
+  ROLLING_BACK: { title: 'Not recovered — rolling back', color: '#F87171', next: 'The change is being reverted' },
+  DIAGNOSE_FAILED: { title: 'Diagnosis failed', color: '#F87171', next: 'Re-run the investigation' },
+  CANCELLED: { title: 'Cancelled', color: '#94A3B8', next: 'Start a new run' },
+  EXPIRED: { title: 'Expired', color: '#94A3B8', next: 'The approval window elapsed' },
+}
+
+export const DIFFICULTY_COLORS: Record<string, string> = {
+  easy: '#34D399',
+  medium: '#FBBF24',
+  hard: '#F87171',
+}
+
+export const BAND_COLORS: Record<string, string> = { high: '#34D399', medium: '#FBBF24', low: '#F87171' }
+export const RISK_COLORS: Record<string, string> = { low: '#34D399', medium: '#FBBF24', high: '#F87171' }
+
+export const SEVERITY_COLORS: Record<string, string> = {
+  critical: '#F87171',
+  high: '#FB923C',
+  medium: '#FBBF24',
+  low: '#60A5FA',
+  info: '#94A3B8',
+}
